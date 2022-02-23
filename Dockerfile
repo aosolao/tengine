@@ -1,8 +1,8 @@
-FROM alpine:3.11.2 as builder
-LABEL maintainer SimonLai<lai@moeneko.com.com>
+FROM alpine:3.15.0 as builder
+LABEL maintainer laihh
 
 #定义环境变量
-ENV TENGINE_VERSION=2.3.2
+ENV TENGINE_VERSION=2.3.3
 
 #定义编译参数
 ENV CONFIG "\
@@ -54,10 +54,8 @@ ENV CONFIG "\
             --http-fastcgi-temp-path=/var/cache/nginx/fastcgi_temp \
             --http-uwsgi-temp-path=/var/cache/nginx/uwsgi_temp \
             --http-scgi-temp-path=/var/cache/nginx/scgi_temp \
-            --with-pcre \
-            --with-openssl-opt=no-nextprotoneg \
         "
-
+COPY  repositories /etc/apk/repositories
 #编译安装
 RUN \
     mkdir -p /usr/src \
@@ -81,13 +79,12 @@ RUN \
         g++ \
         file \
         perl \
+        pcre \
         binutils \
     && wget https://github.com/AirisX/nginx_cookie_flag_module/archive/v1.1.0.tar.gz \
     && tar zxf v1.1.0.tar.gz \
     && curl "https://tengine.taobao.org/download/tengine-$TENGINE_VERSION.tar.gz" -o tengine.tar.gz \
     && tar zxf tengine.tar.gz \
-    && wget https://www.openssl.org/source/openssl-1.1.1d.tar.gz \
-    && tar xzvf openssl-1.1.1d.tar.gz \
     && cd tengine-$TENGINE_VERSION \
     && ./configure $CONFIG \
     && make \
@@ -95,20 +92,31 @@ RUN \
     && rm -f /service/nginx/html/* /service/nginx/*.default \
     && strip /usr/sbin/nginx
 
-
 #===== 多阶段构建 ==========================
 
-FROM alpine:3.11.2
-LABEL maintainer SimonLai<lai@moeneko.com.com>
-
-ENV TENGINE_VERSION=2.3.2
+FROM alpine:3.15.0
+ENV TENGINE_VERSION=2.3.3
 ENV WWW_ROOT=/service/webindex/
 ENV LANG="en_US.UTF-8"
 ENV GLIBC_PKG_VERSION=2.24-r0
+COPY  repositories /etc/apk/repositories
+
 
 COPY --from=builder /usr/sbin/nginx /usr/sbin/nginx
 COPY --from=builder /service/nginx /service/nginx
 COPY --from=builder /usr/lib64/nginx /usr/lib64/nginx
+
+RUN \
+    apk add --no-cache \
+    unzip \
+    curl \
+    wget \
+    vim \
+    htop \
+    zip \
+    bzip2 \
+    bash   
+
 
 RUN \
     addgroup -S www \
@@ -143,7 +151,5 @@ RUN \
     #清理临时文件
     && rm -fr /usr/src /var/cache/apk/*
 
-
 COPY nginx.conf /service/nginx/nginx.conf
-
 CMD ["nginx", "-g", "daemon off;"]
